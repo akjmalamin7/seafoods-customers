@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customers</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+  @custom-variant dark (&:where(.dark, .dark *));
+</style>
+<script>
+  // dark mode follows the system setting
+  if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');
+</script>
+</head>
+<body class="bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 text-[15px] leading-relaxed">
+<div class="max-w-5xl mx-auto px-4 pt-5 pb-16">
+
+  <!-- header -->
+  <header class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div>
+      <h1 class="text-2xl font-semibold">Customers</h1>
+      <p id="summary" class="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="smsStatus" class="text-xs px-3 py-1 rounded-full border border-slate-300 dark:border-slate-700"></span>
+      <button id="settingsBtn" class="btn">⚙ SMS Settings</button>
+    </div>
+  </header>
+
+  <!-- toolbar -->
+  <div class="flex flex-wrap items-center gap-2 mb-3">
+    <input id="q" type="search" placeholder="Name ba phone diye search…" autocomplete="off"
+      class="field flex-1 min-w-60">
+    <select id="pageSize" class="field" title="Per page">
+      <option>10</option><option selected>25</option><option>50</option><option>100</option>
+    </select>
+    <button id="smsBtn" disabled class="btn-primary">SMS pathan (0)</button>
+  </div>
+  <div class="flex flex-wrap items-center gap-2 mb-3">
+    <button id="selPage" class="btn">Ei page select</button>
+    <button id="selAll" class="btn">Search er sob select</button>
+    <button id="clearSel" class="btn">Clear</button>
+    <label class="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+      <input id="onlyBad" type="checkbox"> Shudhu invalid number
+    </label>
+  </div>
+
+  <!-- table -->
+  <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-left whitespace-nowrap">
+        <thead class="bg-slate-50 dark:bg-slate-800/60 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <tr>
+            <th class="px-4 py-2.5 w-10"><input id="headChk" type="checkbox" aria-label="Select page"></th>
+            <th class="px-4 py-2.5">#</th>
+            <th class="px-4 py-2.5">Customer</th>
+            <th class="px-4 py-2.5">Phone</th>
+          </tr>
+        </thead>
+        <tbody id="tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+      </table>
+    </div>
+    <p id="empty" class="hidden p-10 text-center text-slate-500">Kichu paoa jayni</p>
+  </div>
+
+  <!-- pager -->
+  <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
+    <span id="range" class="text-sm text-slate-500 dark:text-slate-400"></span>
+    <div id="pages" class="flex flex-wrap gap-1.5"></div>
+  </div>
+</div>
+
+<!-- SMS dialog -->
+<dialog id="dlg" class="m-auto w-[min(520px,94vw)] rounded-2xl p-5 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 backdrop:bg-black/50">
+  <h2 class="text-lg font-semibold">SMS pathan</h2>
+  <p id="dlgInfo" class="text-sm text-slate-500 dark:text-slate-400"></p>
+  <textarea id="msg" rows="6" placeholder="Message likhun…&#10;{name} likhle customer er nam boshe jabe."
+    class="field w-full mt-3 resize-y"></textarea>
+  <div class="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
+    <span id="count"></span><span>Placeholder: {name}</span>
+  </div>
+  <pre id="result" class="hidden mt-3 text-xs p-3 rounded-lg bg-slate-100 dark:bg-slate-800 whitespace-pre-wrap"></pre>
+  <div class="flex justify-end gap-2 mt-4">
+    <button id="cancel" class="btn">Bondho</button>
+    <button id="send" class="btn-primary">Send</button>
+  </div>
+</dialog>
+
+<!-- Settings dialog -->
+<dialog id="setDlg" class="m-auto w-[min(480px,94vw)] rounded-2xl p-5 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 backdrop:bg-black/50">
+  <h2 class="text-lg font-semibold">BulkSMSBD Settings</h2>
+  <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+    Key ta ei browser er localStorage e thake. Onno kauke page ta diye dibenna / public host korben na.
+  </p>
+  <label class="block mt-3 text-sm">API Key
+    <input id="apiKey" type="password" class="field w-full mt-1" autocomplete="off">
+  </label>
+  <label class="block mt-3 text-sm">Sender ID
+    <input id="senderId" type="text" class="field w-full mt-1" autocomplete="off">
+  </label>
+  <label class="flex items-center gap-2 mt-3 text-sm">
+    <input id="dryRun" type="checkbox"> Dry run (asole SMS jabe na, shudhu preview)
+  </label>
+  <div class="flex justify-end gap-2 mt-4">
+    <button id="setCancel" class="btn">Bondho</button>
+    <button id="setSave" class="btn-primary">Save</button>
+  </div>
+</dialog>
+
+<style type="text/tailwindcss">
+  @layer components {
+    .btn { @apply rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm cursor-pointer hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed; }
+    .btn-primary { @apply rounded-lg border border-blue-600 bg-blue-600 text-white px-3.5 py-2 text-sm cursor-pointer hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed; }
+    .field { @apply rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm outline-none focus:border-blue-500; }
+  }
+</style>
+
+<script src="data.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+
+// ---------- data ----------
+function normalizePhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('880')) {}
+  else if (d.startsWith('0')) d = '88' + d;
+  else if (d.length === 10 && d.startsWith('1')) d = '880' + d;
+  const valid = /^8801[3-9]\d{8}$/.test(d);
+  return { sms: valid ? d : '', valid };
+}
+const all = CUSTOMERS.map(r => {
+  const n = normalizePhone(r.phone);
+  return { ...r, smsNumber: n.sms, valid: n.valid };
+});
+const cnt = {};
+all.forEach(c => { if (c.valid) cnt[c.smsNumber] = (cnt[c.smsNumber] || 0) + 1; });
+all.forEach(c => { c.duplicate = c.valid && cnt[c.smsNumber] > 1; });
+
+let filtered = [], page = 1, size = 25;
+const selected = new Set();
+
+// ---------- settings ----------
+const cfg = () => {
+  try { return JSON.parse(localStorage.getItem('sms_cfg') || '{}'); } catch { return {}; }
+};
+function refreshStatus() {
+  const c = cfg();
+  const el = $('smsStatus');
+  el.textContent = c.dryRun !== false ? 'SMS: dry-run' : (c.apiKey && c.senderId ? `SMS: live (${c.senderId})` : 'SMS: not configured');
+}
+$('settingsBtn').onclick = () => {
+  const c = cfg();
+  $('apiKey').value = c.apiKey || '';
+  $('senderId').value = c.senderId || '';
+  $('dryRun').checked = c.dryRun !== false; // default ON
+  $('setDlg').showModal();
+};
+$('setCancel').onclick = () => $('setDlg').close();
+$('setSave').onclick = () => {
+  try {
+    localStorage.setItem('sms_cfg', JSON.stringify({
+      apiKey: $('apiKey').value.trim(), senderId: $('senderId').value.trim(), dryRun: $('dryRun').checked,
+    }));
+  } catch { alert('localStorage kaj korche na'); }
+  $('setDlg').close(); refreshStatus();
+};
+
+// ---------- table ----------
+function applyFilter() {
+  const q = $('q').value.trim().toLowerCase();
+  const qd = q.replace(/\D/g, '');
+  const bad = $('onlyBad').checked;
+  filtered = all.filter(c => {
+    if (bad && c.valid) return false;
+    if (!q) return true;
+    return c.customer.toLowerCase().includes(q)
+      || (qd && (c.phone.includes(qd) || c.smsNumber.includes(qd)))
+      || String(c.serial) === q;
+  });
+  page = 1;
+  render();
+}
+
+function tag(text, cls) {
+  const s = document.createElement('span');
+  s.textContent = text;
+  s.className = 'ml-2 text-[11px] px-2 py-0.5 rounded-full border ' + cls;
+  return s;
+}
+
+function render() {
+  size = Number($('pageSize').value);
+  const pages = Math.max(1, Math.ceil(filtered.length / size));
+  page = Math.min(page, pages);
+  const start = (page - 1) * size;
+  const rows = filtered.slice(start, start + size);
+
+  const tb = $('tbody');
+  tb.textContent = '';
+  for (const c of rows) {
+    const tr = document.createElement('tr');
+    tr.className = selected.has(c.serial) ? 'bg-blue-50 dark:bg-blue-950/40' : '';
+    const cell = () => { const td = document.createElement('td'); td.className = 'px-4 py-2.5'; tr.appendChild(td); return td; };
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox'; chk.checked = selected.has(c.serial);
+    chk.onchange = () => { chk.checked ? selected.add(c.serial) : selected.delete(c.serial); render(); };
+    cell().appendChild(chk);
+    cell().textContent = c.serial;
+    cell().textContent = c.customer;
+    const ph = cell();
+    ph.textContent = c.phone;
+    if (!c.valid) ph.appendChild(tag('invalid', 'text-red-600 border-red-300 dark:text-red-400 dark:border-red-800'));
+    else if (c.duplicate) ph.appendChild(tag('duplicate', 'text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-800'));
+    tb.appendChild(tr);
+  }
+  $('empty').classList.toggle('hidden', rows.length > 0);
+  $('headChk').checked = rows.length > 0 && rows.every(c => selected.has(c.serial));
+
+  $('range').textContent = filtered.length ? `${start + 1}–${start + rows.length} / ${filtered.length}` : '0 result';
+  $('summary').textContent = `Total ${all.length} jon · ${all.filter(c => !c.valid).length} invalid number · ${selected.size} selected`;
+  $('smsBtn').textContent = `SMS pathan (${selected.size})`;
+  $('smsBtn').disabled = selected.size === 0;
+
+  // pager
+  const box = $('pages'); box.textContent = '';
+  const mk = (label, p, dis, cur) => {
+    const b = document.createElement('button');
+    b.textContent = label; b.disabled = dis;
+    b.className = cur ? 'btn-primary' : 'btn';
+    b.onclick = () => { page = p; render(); window.scrollTo({ top: 0 }); };
+    box.appendChild(b);
+  };
+  mk('‹', page - 1, page === 1);
+  const set = new Set([1, pages, page - 2, page - 1, page, page + 1, page + 2].filter(p => p >= 1 && p <= pages));
+  let prev = 0;
+  [...set].sort((a, b) => a - b).forEach(p => {
+    if (p - prev > 1) { const s = document.createElement('span'); s.textContent = '…'; s.className = 'px-1 text-slate-400'; box.appendChild(s); }
+    mk(String(p), p, false, p === page); prev = p;
+  });
+  mk('›', page + 1, page === pages);
+}
+
+let t;
+$('q').oninput = () => { clearTimeout(t); t = setTimeout(applyFilter, 150); };
+$('pageSize').onchange = () => { page = 1; render(); };
+$('onlyBad').onchange = applyFilter;
+const pageRows = () => filtered.slice((page - 1) * size, page * size);
+$('headChk').onchange = e => { pageRows().forEach(c => e.target.checked ? selected.add(c.serial) : selected.delete(c.serial)); render(); };
+$('selPage').onclick = () => { pageRows().forEach(c => selected.add(c.serial)); render(); };
+$('selAll').onclick = () => { filtered.forEach(c => selected.add(c.serial)); render(); };
+$('clearSel').onclick = () => { selected.clear(); render(); };
+
+// ---------- SMS ----------
+// Recipients: valid numbers only, duplicates removed (first one wins)
+function recipients() {
+  const seen = new Set(), out = [];
+  let bad = 0, dup = 0;
+  all.filter(c => selected.has(c.serial)).forEach(c => {
+    if (!c.valid) { bad++; return; }
+    if (seen.has(c.smsNumber)) { dup++; return; }
+    seen.add(c.smsNumber); out.push(c);
+  });
+  return { list: out, bad, dup };
+}
+function updateCount() {
+  const m = $('msg').value;
+  const uni = /[^\x00-\x7F]/.test(m);
+  const per = uni ? (m.length > 70 ? 67 : 70) : (m.length > 160 ? 153 : 160);
+  $('count').textContent = `${m.length} char · ${Math.max(1, Math.ceil(m.length / per))} SMS (${uni ? 'Unicode/বাংলা' : 'English'})`;
+}
+$('smsBtn').onclick = () => {
+  const r = recipients();
+  $('dlgInfo').textContent = `${r.list.length} ta number e jabe` + (r.bad || r.dup ? ` (${r.bad} invalid, ${r.dup} duplicate bad jabe)` : '');
+  $('result').classList.add('hidden');
+  updateCount(); $('dlg').showModal();
+};
+$('msg').oninput = updateCount;
+$('cancel').onclick = () => $('dlg').close();
+
+// BulkSMSBD single-SMS API: GET http://bulksmsbd.net/api/smsapi?api_key=&type=&number=&senderid=&message=
+// The API sends no CORS headers, so the browser can only fire the request ("no-cors")
+// and cannot read the reply. Check delivery reports in the BulkSMSBD panel.
+async function sendOne(c, text, conf) {
+  const message = text.replace(/\{name\}/gi, c.customer);
+  const params = new URLSearchParams({
+    api_key: conf.apiKey,
+    type: /[^\x00-\x7F]/.test(message) ? 'unicode' : 'text',
+    number: c.smsNumber,
+    senderid: conf.senderId,
+    message,
+  });
+  await fetch('http://bulksmsbd.net/api/smsapi?' + params, { mode: 'no-cors' });
+}
+
+$('send').onclick = async () => {
+  const text = $('msg').value.trim();
+  const conf = cfg();
+  const dry = conf.dryRun !== false;
+  const { list } = recipients();
+  const out = $('result');
+  out.classList.remove('hidden');
+  if (!text) { out.textContent = 'Message khali.'; return; }
+  if (!list.length) { out.textContent = 'Pathanor moto valid number nei.'; return; }
+  if (!dry && !(conf.apiKey && conf.senderId)) { out.textContent = 'Age ⚙ SMS Settings e API key ar Sender ID din.'; return; }
+  if (!confirm(`${list.length} jon ke ${dry ? '(DRY RUN) ' : ''}SMS pathabo. Confirm?`)) return;
+
+  $('send').disabled = true;
+  let done = 0, failed = 0;
+  const failedNames = [];
+  const tick = () => { out.textContent = `${dry ? '[DRY RUN] ' : ''}Pathacchi… ${done}/${list.length}`; };
+  tick();
+
+  if (dry) {
+    list.slice(0, 3).forEach(c => console.log('DRY RUN →', c.smsNumber, text.replace(/\{name\}/gi, c.customer)));
+    await new Promise(r => setTimeout(r, 400));
+    out.textContent = `[DRY RUN – asole pathano hoyni]\n${list.length} ta SMS pathano hoto.\nPreview:\n` +
+      list.slice(0, 3).map(c => `• ${c.smsNumber}: ${text.replace(/\{name\}/gi, c.customer)}`).join('\n');
+    $('send').disabled = false;
+    return;
+  }
+
+  // 5 requests at a time
+  const queue = [...list];
+  const worker = async () => {
+    while (queue.length) {
+      const c = queue.shift();
+      try { await sendOne(c, text, conf); } catch { failed++; failedNames.push(c.customer); }
+      done++; tick();
+    }
+  };
+  await Promise.all(Array.from({ length: 5 }, worker));
+
+  out.textContent = `Request pathano shesh: ${done - failed}/${list.length}` +
+    (failed ? `\nNetwork error: ${failed} (${failedNames.slice(0, 5).join(', ')}${failed > 5 ? '…' : ''})` : '') +
+    `\n\nNote: browser theke BulkSMSBD er reply porha jay na, tai asol delivery status BulkSMSBD panel e dekhun.`;
+  $('send').disabled = false;
+};
+
+// ---------- init ----------
+refreshStatus();
+applyFilter();
+</script>
+</body>
+</html>
